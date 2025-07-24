@@ -1,4 +1,13 @@
-"""Plan模式实现 - 任务规划和分解"""
+"""
+Plan模式实现 - 任务规划和分解
+
+对应Cline模块关系:
+- PlanModeManager -> Cline的PlanModeManager类
+- TaskPlanner -> Cline的任务规划逻辑
+- create_plan() -> Cline的plan模式处理逻辑
+- ExecutionPlan -> Cline的执行计划数据结构
+- 使用plan_mode_respond工具 -> Cline的plan_mode_respond工具
+"""
 
 import uuid
 from datetime import datetime

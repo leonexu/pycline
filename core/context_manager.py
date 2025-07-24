@@ -1,6 +1,15 @@
 """
 PyCline上下文管理器
 基于Cline的智能上下文管理机制实现，包括智能截断、内容去重和文件跟踪功能
+
+对应Cline模块关系:
+- ContextManager -> Cline的ContextManager类
+- FileContextTracker -> Cline的FileContextTracker类
+- ContextUpdate -> Cline的ContextUpdate类型
+- FileMetadataEntry -> Cline的FileMetadataEntry类型
+- get_optimized_context_messages() -> Cline的getNewContextMessagesAndMetadata()
+- _apply_intelligent_truncation() -> Cline的getNextTruncationRange()
+- _find_duplicate_file_reads() -> Cline的getPossibleDuplicateFileReads()
 """
 
 import json

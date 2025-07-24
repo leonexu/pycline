@@ -1,6 +1,14 @@
 """
 PyCline任务管理器
 集成上下文管理和Plan模式功能
+
+对应Cline模块关系:
+- TaskManager -> Cline的Controller + TaskManager组合
+- TaskMetadata -> Cline的HistoryItem + TaskState部分功能
+- create_task() -> Cline的Controller.initTask()
+- process_user_input() -> Cline的Task.startTask()
+- switch_mode() -> Cline的ChatSettings模式切换
+- get_optimized_context() -> Cline的ContextManager.buildContext()
 """
 
 import asyncio

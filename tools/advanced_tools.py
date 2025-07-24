@@ -232,7 +232,16 @@ def _is_binary_file(file_path: str) -> bool:
 
 
 class AdvancedToolManager:
-    """高级工具管理器"""
+    """
+    高级工具管理器
+    
+    对应Cline的ToolExecutor类:
+    - tools字典 -> Cline的工具注册机制
+    - process_request() -> Cline的executeTool()
+    - 工具选择逻辑 -> Cline的工具路由机制
+    - 集成replace_in_file, str_replace_editor, grep_search
+      对应Cline的同名工具实现
+    """
     
     def __init__(self):
         self.tools = {

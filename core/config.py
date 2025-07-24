@@ -1,4 +1,13 @@
-"""PyCline配置管理"""
+"""
+PyCline配置管理
+
+对应Cline模块关系:
+- AIConfig -> Cline的ApiConfiguration
+- SecurityConfig -> Cline的安全设置
+- ContextConfig -> Cline的ContextManager配置
+- LogConfig -> Cline的日志配置
+- Config -> Cline的全局配置管理
+"""
 
 from pydantic import BaseModel, Field
 from typing import Optional, List
