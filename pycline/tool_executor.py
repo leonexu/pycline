@@ -341,14 +341,12 @@ class ToolExecutor:
     
     async def _handle_error(self, action: str, error: Exception, block: ToolUse) -> None:
         """处理错误"""
-        error_message = f"Error {action}: {str(error)}"
+        error_message = f"Error {action}: {str(error)}, block: {block}"
         
         if self.say_callback:
             await self.say_callback(ClineSay.ERROR, error_message)
         
-        print(f"ToolExecutor Error: {error_message}")
-        # 直接抛出错误以便调试
-        raise error
+        raise Exception(error_message)
     
     def update_auto_approval_settings(self, enabled: bool, safe_tools: bool = True, 
                                     all_tools: bool = False) -> None:

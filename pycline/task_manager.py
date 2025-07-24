@@ -19,7 +19,7 @@ import uuid
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict
 from datetime import datetime
-from utils import setup_logger
+from .utils import setup_logger
 from .context_manager import ContextManager
 from .plan_mode import PlanModeManager
 from .types import (
@@ -102,8 +102,8 @@ class TaskManager:
         await self.context_manager.initialize_context_history()
         
         # 初始化Plan模式管理器
-        from providers.langgraph_provider import LangGraphProvider
-        from core.config import AIConfig
+        from .providers.langgraph_provider import LangGraphProvider
+        from .config import AIConfig
         
         # 创建AI配置
         ai_config = AIConfig(
@@ -159,8 +159,8 @@ class TaskManager:
         await self.context_manager.initialize_context_history()
         
         # 初始化Plan模式管理器
-        from providers.langgraph_provider import LangGraphProvider
-        from core.config import AIConfig
+        from .providers.langgraph_provider import LangGraphProvider
+        from .config import AIConfig
         
         # 创建AI配置
         ai_config = AIConfig(

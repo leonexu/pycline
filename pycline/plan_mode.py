@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
-from utils import setup_logger
+from .utils import setup_logger
 logger = setup_logger()
 
 class TaskComplexity(Enum):
@@ -434,7 +434,7 @@ class TaskPlanner:
         return order
 
 
-from providers.langgraph_provider import LangGraphProvider
+from .providers.langgraph_provider import LangGraphProvider
 
 class PlanModeManager:
     """Plan模式管理器"""
