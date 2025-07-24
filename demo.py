@@ -3,7 +3,8 @@ from core.task_manager import TaskManager
 from core.types import WebviewMessage
 
 # 创建任务管理器
-task_manager = TaskManager("./project")
+work_dir = "./results/project"
+task_manager = TaskManager(work_dir)
 
 async def main():
     # 使用Cline标准接口初始化任务
@@ -27,7 +28,7 @@ async def example_usage():
     from core.types import WebviewMessage, ChatSettings, ClineSay, ClineAsk, ToolUse
     
     # 创建任务管理器
-    task_manager = TaskManager("./test_project")
+    task_manager = TaskManager(work_dir)
     
     print("=== PyCline标准化接口演示 ===\n")
     
@@ -130,7 +131,7 @@ async def tool_executor_demo():
     print("\n=== 工具执行器演示 ===\n")
     
     # 创建工具执行器
-    tool_executor = ToolExecutor("./test_project")
+    tool_executor = ToolExecutor(work_dir)
     
     # 1. 获取可用工具
     print("1. 可用工具:")
@@ -143,7 +144,7 @@ async def tool_executor_demo():
     print("\n2. 执行读取文件工具...")
     read_tool = ToolUse(
         name="read_file",
-        params={"path": "demo.py"}
+        params={"path": "../../demo.py"}  # 相对于test_project目录
     )
     await tool_executor.execute_tool(read_tool)
     
@@ -158,33 +159,61 @@ async def tool_executor_demo():
     print("\n=== 工具执行器演示完成 ===")
 
 
-# 兼容性演示
-async def compatibility_demo():
-    """兼容性演示 - 展示新旧接口共存"""
-    print("\n=== 兼容性演示 ===\n")
+# 完整功能演示
+async def full_feature_demo():
+    """完整功能演示 - 展示所有标准化接口"""
+    from core.types import WebviewMessage, ChatSettings, ClineSay, ClineAsk, ToolUse
     
-    task_manager = TaskManager("./test_project")
+    print("\n=== 完整功能演示 ===\n")
     
-    # 使用新接口创建任务
-    print("1. 使用新接口创建任务...")
-    task_id = await task_manager.init_task(task="兼容性测试任务")
+    task_manager = TaskManager(work_dir)
     
-    # 使用旧接口处理输入（仍然可用）
-    print("2. 使用旧接口处理输入...")
-    response = await task_manager.process_user_input("测试兼容性")
-    print(f"   响应: {response}")
+    # 1. 创建任务
+    print("1. 创建任务...")
+    task_id = await task_manager.init_task(task="完整功能测试任务")
+    print(f"   任务ID: {task_id}")
     
-    # 使用新接口获取状态
-    print("3. 使用新接口获取状态...")
+    # 2. 发送消息
+    print("2. 发送Say消息...")
+    await task_manager.say(ClineSay.TEXT, "任务已创建，开始处理")
+    
+    # 3. 处理用户输入
+    print("3. 处理用户输入...")
+    message = WebviewMessage(type="user_input", text="请创建一个简单的Python脚本")
+    await task_manager.handle_message(message)
+    
+    # 4. 执行工具
+    print("4. 执行工具...")
+    tool_use = ToolUse(
+        name="write_to_file",
+        params={
+            "path": "hello.py",
+            "content": "print('Hello, PyCline!')\nprint('标准化接口测试成功')"
+        }
+    )
+    await task_manager.execute_tool(tool_use)
+    
+    # 5. 获取消息历史
+    print("5. 获取消息历史...")
+    messages = task_manager.get_cline_messages()
+    print(f"   消息数量: {len(messages)}")
+    
+    # 6. 获取任务状态
+    print("6. 获取任务状态...")
     status = await task_manager.get_task_status()
     print(f"   任务状态: {status['status']}")
+    print(f"   对话长度: {status['conversation_length']}")
     
-    # 清理
+    # 7. 清理
+    print("7. 清理任务...")
+    await task_manager.clear_task()
     await task_manager.cleanup()
     
-    print("\n=== 兼容性演示完成 ===")
+    print("\n=== 完整功能演示完成 ===")
 
 
 if __name__ == "__main__":
     asyncio.run(example_usage())
+    asyncio.run(full_feature_demo())
+    asyncio.run(tool_executor_demo())
     # asyncio.run(main())

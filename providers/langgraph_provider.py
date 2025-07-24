@@ -42,7 +42,7 @@ class LangGraphProvider:
     def create_langchain_tools(self, tools: List[Tool]) -> List:
         """将PyCline工具转换为LangChain工具"""
         # 简化版本：直接使用预定义的简单工具
-        from ..tools.simple_tools import SIMPLE_TOOLS
+        from tools.simple_tools import SIMPLE_TOOLS
         return SIMPLE_TOOLS
 
     def execute_task(self, context_str: str, task_description: str, tools: List[Tool]) -> Dict[str, Any]:

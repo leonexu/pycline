@@ -40,6 +40,7 @@ class ReadFileTool(ToolInterface):
     
     def __init__(self, working_directory: str):
         self.working_directory = working_directory
+        os.makedirs(working_directory, exist_ok=True)
     
     async def execute(self, params: Dict[str, Any], partial: bool = False) -> ToolResponse:
         file_path = params.get("path")

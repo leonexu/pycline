@@ -167,8 +167,8 @@ class TaskPlanner:
 4. 优先级合理
 """
         
-        # 调用AI获取分解结果
-        ai_response = self.ai_provider.generate(decomposition_prompt)
+        result = self.ai_provider.execute_task("", decomposition_prompt, [])
+        ai_response = result.get("content", "")
         
         # 解析AI响应
         subtasks = self._parse_subtasks_response(ai_response)

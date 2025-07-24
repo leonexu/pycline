@@ -132,16 +132,8 @@ class TaskManager:
         print(f"[TaskManager] 创建任务: {title} (ID: {task_id}, 模式: {mode})")
         return task_id
     
-    async def resume_task(self, task_id: str) -> bool:
-        """
-        恢复任务
-        
-        Args:
-            task_id: 任务ID
-            
-        Returns:
-            是否成功恢复
-        """
+    async def _resume_task(self, task_id: str) -> bool:
+        """内部恢复任务方法"""
         # 查找任务
         task_metadata = None
         for task in self.task_history:
@@ -189,40 +181,6 @@ class TaskManager:
         await self._save_task_metadata(task_metadata)
         
         print(f"[TaskManager] 恢复任务: {task_metadata.title} (ID: {task_id})")
-        return True
-    
-    async def switch_mode(self, mode: str) -> bool:
-        """
-        切换任务模式
-        
-        Args:
-            mode: 目标模式 ("plan" | "act")
-            
-        Returns:
-            是否成功切换
-        """
-        if not self.current_task:
-            print("[TaskManager] 没有活跃任务")
-            return False
-        
-        if self.current_task.mode == mode:
-            print(f"[TaskManager] 已经是 {mode} 模式")
-            return True
-        
-        # 更新任务模式
-        self.current_task.mode = mode
-        self.current_task.updated_at = time.time()
-        
-        # 保存任务
-        await self._save_task_metadata(self.current_task)
-        
-        # 添加模式切换消息
-        await self.add_message(
-            "system", 
-            f"[MODE_SWITCH] 切换到 {mode.upper()} 模式"
-        )
-        
-        print(f"[TaskManager] 切换到 {mode.upper()} 模式")
         return True
     
     async def add_message(self, role: str, content: str, metadata: Optional[Dict] = None) -> None:
@@ -274,16 +232,8 @@ class TaskManager:
             token_usage
         )
     
-    async def process_user_input(self, user_input: str) -> str:
-        """
-        处理用户输入
-        
-        Args:
-            user_input: 用户输入
-            
-        Returns:
-            AI响应
-        """
+    async def _process_user_input(self, user_input: str) -> str:
+        """内部处理用户输入方法"""
         if not self.current_task:
             return "错误: 没有活跃任务。请先创建或恢复任务。"
         
@@ -538,7 +488,7 @@ class TaskManager:
         """
         if history_item:
             # 从历史恢复任务
-            success = await self.resume_task(history_item.id)
+            success = await self._resume_task(history_item.id)
             if success:
                 return history_item.id
             else:
@@ -561,9 +511,9 @@ class TaskManager:
         message_type = message.type
         
         if message_type == "user_input":
-            await self.process_user_input(message.text or "")
+            await self._process_user_input(message.text or "")
         elif message_type == "mode_switch":
-            await self.switch_mode(message.text or "act")
+            await self._switch_mode(message.text or "act")
         else:
             print(f"[TaskManager] Unknown message type: {message_type}")
     
@@ -578,7 +528,33 @@ class TaskManager:
         """
         切换Plan/Act模式 - 对应Cline的Controller.togglePlanActModeWithChatSettings()
         """
-        return await self.switch_mode(chat_settings.mode)
+        return await self._switch_mode(chat_settings.mode)
+    
+    async def _switch_mode(self, mode: str) -> bool:
+        """内部切换模式方法"""
+        if not self.current_task:
+            print("[TaskManager] 没有活跃任务")
+            return False
+        
+        if self.current_task.mode == mode:
+            print(f"[TaskManager] 已经是 {mode} 模式")
+            return True
+        
+        # 更新任务模式
+        self.current_task.mode = mode
+        self.current_task.updated_at = time.time()
+        
+        # 保存任务
+        await self._save_task_metadata(self.current_task)
+        
+        # 添加模式切换消息
+        await self.add_message(
+            "system", 
+            f"[MODE_SWITCH] 切换到 {mode.upper()} 模式"
+        )
+        
+        print(f"[TaskManager] 切换到 {mode.upper()} 模式")
+        return True
     
     async def say(self, message_type: ClineSay, text: Optional[str] = None,
                  images: Optional[List[str]] = None, files: Optional[List[str]] = None,
