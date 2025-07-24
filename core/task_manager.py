@@ -19,7 +19,7 @@ import uuid
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict
 from datetime import datetime
-from common_base import setup_logger
+from utils import setup_logger
 from .context_manager import ContextManager
 from .plan_mode import PlanModeManager
 from .types import (

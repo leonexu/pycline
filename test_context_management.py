@@ -9,7 +9,7 @@ import tempfile
 import shutil
 from core.context_manager import ContextManager
 from core.task_manager import TaskManager
-from common_base import setup_logger
+from utils import setup_logger
 logger = setup_logger()
 
 async def test_context_optimization():

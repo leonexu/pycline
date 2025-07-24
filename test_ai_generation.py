@@ -6,7 +6,7 @@ import asyncio
 import os
 from core.task_manager import TaskManager
 from core.types import WebviewMessage, ClineSay
-from common_base import setup_logger
+from utils import setup_logger
 logger = setup_logger()
 
 async def test_ai_code_generation():
