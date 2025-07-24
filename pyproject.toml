@@ -1,0 +1,27 @@
+[project]
+name = "pycline"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "xling",email = "leonexu@qq.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pytz (>=2025.2,<2026.0)",
+    "watchdog (>=6.0.0,<7.0.0)",
+    "langchain-openai (>=0.3.28,<0.4.0)",
+    "langchain-deepseek (>=0.1.4,<0.2.0)",
+    "langgraph (>=0.5.4,<0.6.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[[tool.poetry.source]]
+name = "mirrors"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple/"
+priority = "primary"
+

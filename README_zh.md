@@ -25,7 +25,7 @@ PyCline 是 Cline（原 Claude Dev）的 Python 实现，提供 AI 驱动的代�
 ```bash
 git clone https://github.com/leonexu/pycline.git
 cd pycline
-pip install -r requirements.txt
+pip install -r requirements.txt # or poetry install
 ```
 
 ### 基本使用

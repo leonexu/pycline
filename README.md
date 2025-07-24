@@ -25,7 +25,7 @@ PyCline is a Python implementation of Cline (formerly Claude Dev), providing AI-
 ```bash
 git clone https://github.com/leonexu/pycline.git
 cd pycline
-pip install -r requirements.txt
+pip install -r requirements.txt # or poetry install
 ```
 
 ### Basic Usage
