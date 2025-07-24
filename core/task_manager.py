@@ -22,6 +22,11 @@ from datetime import datetime
 
 from .context_manager import ContextManager
 from .plan_mode import PlanModeManager
+from .types import (
+    ClineSay, ClineAsk, AskResponse, ClineAskResponse, WebviewMessage,
+    ClineMessage, ChatSettings, HistoryItem, ToolUse
+)
+from .tool_executor import ToolExecutor
 from tools.advanced_tools import AdvancedToolManager
 
 
@@ -65,7 +70,7 @@ class TaskManager:
         self.task_history: List[TaskMetadata] = []
         self._load_task_history()
     
-    async def create_task(
+    async def _create_task_internal(
         self, 
         title: str, 
         description: str, 
@@ -73,16 +78,7 @@ class TaskManager:
         model_name: str = "claude-3-sonnet"
     ) -> str:
         """
-        创建新任务
-        
-        Args:
-            title: 任务标题
-            description: 任务描述
-            mode: 工作模式 ("plan" | "act")
-            model_name: 使用的AI模型
-            
-        Returns:
-            任务ID
+        内部创建任务方法
         """
         task_id = str(uuid.uuid4())
         now = time.time()
@@ -317,11 +313,24 @@ class TaskManager:
         context, _ = await self.get_optimized_context()
         
         # 使用Plan模式处理
-        response = await self.plan_mode_manager.process_planning_request(
-            user_input, 
-            context,
-            self.working_directory
-        )
+        # 创建执行计划
+        plan = self.plan_mode_manager.create_plan(user_input, self.working_directory)
+        
+        # 获取计划摘要
+        plan_summary = self.plan_mode_manager.get_plan_summary(plan)
+        
+        response = f"""
+🎯 Plan模式分析完成
+
+{plan_summary}
+
+💡 建议：
+1. 按照上述顺序执行子任务
+2. 每完成一个子任务后进行验证
+3. 如需调整计划，可以切换到Act模式进行具体实施
+
+是否需要开始执行此计划？请切换到Act模式开始实施。
+"""
         
         return response
     
@@ -518,43 +527,185 @@ class TaskManager:
             self.context_manager.file_context_tracker.dispose()
         
         print("[TaskManager] 资源清理完成")
-
-
-# 使用示例
-async def example_usage():
-    """使用示例"""
-    # 创建任务管理器
-    task_manager = TaskManager("./test_project")
     
-    # 创建新任务
-    task_id = await task_manager.create_task(
-        title="开发Web应用",
-        description="创建一个简单的Web应用，包含前端和后端",
-        mode="plan"
-    )
+    # ========== Cline标准化接口 ==========
+    # 以下方法与Cline的Controller + Task接口保持一致
     
-    # 处理用户输入
-    response1 = await task_manager.process_user_input(
-        "请分析项目需求并制定开发计划"
-    )
-    print(f"AI响应: {response1}")
+    async def init_task(self, task: Optional[str] = None, images: Optional[List[str]] = None,
+                       files: Optional[List[str]] = None, history_item: Optional[HistoryItem] = None) -> str:
+        """
+        初始化任务 - 对应Cline的Controller.initTask()
+        """
+        if history_item:
+            # 从历史恢复任务
+            success = await self.resume_task(history_item.id)
+            if success:
+                return history_item.id
+            else:
+                raise ValueError(f"Failed to resume task: {history_item.id}")
+        elif task or images or files:
+            # 创建新任务
+            task_text = task or "New task"
+            return await self._create_task_internal(
+                title="User Task",
+                description=task_text,
+                mode="act"
+            )
+        else:
+            raise ValueError("Either history_item or task/images/files must be provided")
     
-    # 切换到Act模式
-    await task_manager.switch_mode("act")
+    async def handle_message(self, message: WebviewMessage) -> None:
+        """
+        处理消息 - 对应Cline的Controller.handleWebviewMessage()
+        """
+        message_type = message.type
+        
+        if message_type == "user_input":
+            await self.process_user_input(message.text or "")
+        elif message_type == "mode_switch":
+            await self.switch_mode(message.text or "act")
+        else:
+            print(f"[TaskManager] Unknown message type: {message_type}")
     
-    # 继续处理
-    response2 = await task_manager.process_user_input(
-        "开始实现前端页面"
-    )
-    print(f"AI响应: {response2}")
+    async def get_current_mode(self) -> str:
+        """获取当前模式 - 对应Cline的Controller.getCurrentMode()"""
+        if self.current_task:
+            return self.current_task.mode
+        return "act"
     
-    # 获取任务状态
-    status = await task_manager.get_task_status()
-    print(f"任务状态: {status}")
+    async def toggle_plan_act_mode(self, chat_settings: ChatSettings, 
+                                  chat_content: Optional[Dict] = None) -> bool:
+        """
+        切换Plan/Act模式 - 对应Cline的Controller.togglePlanActModeWithChatSettings()
+        """
+        return await self.switch_mode(chat_settings.mode)
     
-    # 清理
-    await task_manager.cleanup()
-
-
-if __name__ == "__main__":
-    asyncio.run(example_usage())
+    async def say(self, message_type: ClineSay, text: Optional[str] = None,
+                 images: Optional[List[str]] = None, files: Optional[List[str]] = None,
+                 partial: Optional[bool] = None) -> None:
+        """
+        发送Say消息 - 对应Cline的Task.say()
+        """
+        # 转换为内部消息格式
+        role = "assistant" if message_type in [ClineSay.TEXT, ClineSay.TOOL] else "system"
+        content = text or f"[{message_type}]"
+        
+        await self.add_message(role, content, {
+            "message_type": message_type,
+            "images": images,
+            "files": files,
+            "partial": partial
+        })
+        
+        print(f"[SAY {message_type}] {text}")
+    
+    async def ask(self, message_type: ClineAsk, text: Optional[str] = None,
+                 partial: Optional[bool] = None) -> AskResponse:
+        """
+        发送Ask消息 - 对应Cline的Task.ask()
+        """
+        # 添加询问消息
+        await self.add_message("system", f"[ASK {message_type}] {text}", {
+            "message_type": message_type,
+            "partial": partial
+        })
+        
+        print(f"[ASK {message_type}] {text}")
+        
+        # 简化的用户交互 - 在实际应用中应该等待用户响应
+        # 这里默认返回批准
+        return AskResponse(
+            response=ClineAskResponse.YES_BUTTON_CLICKED,
+            text=None,
+            images=None,
+            files=None
+        )
+    
+    def get_cline_messages(self) -> List[ClineMessage]:
+        """
+        获取Cline消息列表 - 转换内部消息格式
+        """
+        cline_messages = []
+        for msg in self.conversation_history:
+            # 转换为ClineMessage格式
+            ts = int(msg.get("timestamp", time.time()) * 1000)
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            metadata = msg.get("metadata", {})
+            
+            if role == "user":
+                cline_msg = ClineMessage.create_ask(ClineAsk.FOLLOWUP, content)
+            else:
+                message_type = metadata.get("message_type", ClineSay.TEXT)
+                cline_msg = ClineMessage.create_say(message_type, content)
+            
+            cline_msg.ts = ts
+            cline_messages.append(cline_msg)
+        
+        return cline_messages
+    
+    def get_api_conversation_history(self) -> List[Dict[str, Any]]:
+        """
+        获取API对话历史 - 对应Cline的消息格式
+        """
+        api_history = []
+        for msg in self.conversation_history:
+            if msg.get("role") in ["user", "assistant"]:
+                api_history.append({
+                    "role": msg["role"],
+                    "content": msg["content"]
+                })
+        return api_history
+    
+    async def get_new_context_messages_and_metadata(
+        self, 
+        api_conversation_history: List[Dict[str, Any]],
+        cline_messages: List[ClineMessage],
+        api_handler: Optional[Any],
+        conversation_history_deleted_range: Optional[Tuple[int, int]],
+        previous_api_req_index: int,
+        task_dir: str
+    ) -> Any:
+        """
+        获取新的上下文消息和元数据 - 对应Cline的ContextManager.getNewContextMessagesAndMetadata()
+        """
+        if self.context_manager:
+            return await self.context_manager.get_new_context_messages_and_metadata(
+                api_conversation_history,
+                cline_messages,
+                api_handler,
+                conversation_history_deleted_range,
+                previous_api_req_index,
+                task_dir
+            )
+        
+        # 返回默认结果
+        from .types import ContextMetadata
+        return ContextMetadata(
+            truncated_conversation_history=api_conversation_history,
+            conversation_history_deleted_range=conversation_history_deleted_range
+        )
+    
+    async def execute_tool(self, tool_use: ToolUse) -> None:
+        """
+        执行工具 - 对应Cline的ToolExecutor.executeTool()
+        """
+        # 初始化工具执行器（如果还没有）
+        if not hasattr(self, 'tool_executor'):
+            self.tool_executor = ToolExecutor(
+                working_directory=self.working_directory,
+                say_callback=self.say,
+                ask_callback=self.ask
+            )
+        
+        await self.tool_executor.execute_tool(tool_use)
+    
+    async def clear_task(self) -> None:
+        """清理当前任务"""
+        if self.current_task:
+            self.current_task = None
+            self.conversation_history = []
+            if self.context_manager:
+                self.context_manager.file_context_tracker.dispose()
+                self.context_manager = None
+            print("[TaskManager] 任务已清理")
