@@ -233,14 +233,10 @@ def _is_binary_file(file_path: str) -> bool:
 
 class AdvancedToolManager:
     """
-    高级工具管理器
+    高级工具管理器 - 已废弃，由AI直接决定工具使用
     
-    对应Cline的ToolExecutor类:
-    - tools字典 -> Cline的工具注册机制
-    - process_request() -> Cline的executeTool()
-    - 工具选择逻辑 -> Cline的工具路由机制
-    - 集成replace_in_file, str_replace_editor, grep_search
-      对应Cline的同名工具实现
+    注意：这个类已经不再使用基于规则的工具选择
+    现在由LangGraphProvider的AI直接决定使用哪些工具
     """
     
     def __init__(self):
@@ -252,28 +248,9 @@ class AdvancedToolManager:
     
     async def process_request(self, user_input: str, context: list, working_directory: str) -> str:
         """
-        处理用户请求，决定使用哪个工具
-        
-        Args:
-            user_input: 用户输入
-            context: 对话上下文
-            working_directory: 工作目录
-            
-        Returns:
-            工具执行结果
+        这个方法已废弃 - 现在由AI直接处理请求
         """
-        user_input_lower = user_input.lower()
-        
-        # 简单的工具选择逻辑
-        if any(keyword in user_input_lower for keyword in ['替换', 'replace', '修改']):
-            if '精确' in user_input_lower or 'exact' in user_input_lower:
-                return "使用str_replace_editor工具进行精确替换"
-            else:
-                return "使用replace_in_file工具进行内容替换"
-        elif any(keyword in user_input_lower for keyword in ['搜索', 'search', '查找', 'grep']):
-            return "使用grep_search工具进行内容搜索"
-        else:
-            return f"理解您的请求：{user_input}。当前工作目录：{working_directory}，上下文长度：{len(context)}条消息。"
+        return "错误：此方法已废弃，应该由AI直接处理请求"
 
 
 # 导出工具列表

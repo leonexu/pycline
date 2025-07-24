@@ -285,41 +285,94 @@ class TaskManager:
         return response
     
     async def _process_act_mode(self, user_input: str) -> str:
-        """处理Act模式输入"""
+        """处理Act模式输入 - 像Cline一样直接让AI决定是否使用工具"""
         # 获取优化后的上下文
         context, was_optimized = await self.get_optimized_context()
         
         if was_optimized:
             print("[TaskManager] 上下文已优化")
         
-        # 检查是否需要使用工具
-        if self._should_use_tools(user_input):
-            # 使用工具处理
-            tool_response = await self.tool_manager.process_request(
-                user_input, 
-                context,
-                self.working_directory
-            )
-            return tool_response
-        else:
-            # 直接AI对话
-            return await self._get_ai_response(context)
-    
-    def _should_use_tools(self, user_input: str) -> bool:
-        """判断是否需要使用工具"""
-        tool_keywords = [
-            "读取", "写入", "创建", "删除", "修改", "执行", "运行",
-            "read", "write", "create", "delete", "modify", "execute", "run",
-            "文件", "目录", "代码", "脚本", "命令"
-        ]
-        
-        return any(keyword in user_input.lower() for keyword in tool_keywords)
+        # 直接让AI处理，AI会自动决定是否使用工具
+        return await self._get_ai_response(context)
     
     async def _get_ai_response(self, context: List[Dict[str, Any]]) -> str:
-        """获取AI响应（模拟）"""
-        # 这里应该调用实际的AI API
-        # 目前返回模拟响应
-        return f"我理解您的请求。当前模式: {self.current_task.mode.upper()}。上下文长度: {len(context)}条消息。"
+        """获取AI响应 - 调用真实的AI模型"""
+        if not self.plan_mode_manager or not self.plan_mode_manager.ai_provider:
+            return "错误: AI提供者未初始化"
+        
+        # 构建上下文字符串
+        context_str = ""
+        for msg in context[-10:]:  # 只取最近10条消息作为上下文
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            context_str += f"{role}: {content}\n"
+        
+        # 获取最后一条用户消息作为任务描述
+        user_message = ""
+        for msg in reversed(context):
+            if msg.get("role") == "user":
+                user_message = msg.get("content", "")
+                break
+        
+        if not user_message:
+            return "错误: 没有找到用户输入"
+        
+        # 使用LangGraphProvider执行任务
+        result = self.plan_mode_manager.ai_provider.execute_task(
+            context_str, 
+            user_message, 
+            []  # 工具列表，这里传空，让AI自动选择工具
+        )
+        
+        # 提取AI响应
+        ai_response = result.get("content", "")
+        
+        # 检查是否有工具调用
+        tool_calls = result.get("tool_calls", [])
+        if tool_calls:
+            # 如果有工具调用，执行工具并返回结果
+            for tool_call in tool_calls:
+                tool_name = tool_call.get("name", "")
+                tool_args = tool_call.get("args", {})
+                
+                # 转换为ToolUse格式并执行
+                if tool_name in ["write_file", "write_to_file"]:
+                    tool_use = ToolUse(
+                        name="write_to_file",
+                        params={
+                            "path": tool_args.get("file_path", tool_args.get("path", "output.txt")),
+                            "content": tool_args.get("content", "")
+                        }
+                    )
+                    await self.execute_tool(tool_use)
+                elif tool_name in ["read_file"]:
+                    tool_use = ToolUse(
+                        name="read_file",
+                        params={
+                            "path": tool_args.get("file_path", tool_args.get("path", ""))
+                        }
+                    )
+                    await self.execute_tool(tool_use)
+                elif tool_name in ["list_directory", "list_files"]:
+                    tool_use = ToolUse(
+                        name="list_files",
+                        params={
+                            "path": tool_args.get("directory_path", tool_args.get("path", ".")),
+                            "recursive": "false"
+                        }
+                    )
+                    await self.execute_tool(tool_use)
+                elif tool_name in ["execute_command"]:
+                    tool_use = ToolUse(
+                        name="execute_command",
+                        params={
+                            "command": tool_args.get("command", ""),
+                            "working_directory": tool_args.get("working_directory", self.working_directory)
+                        }
+                    )
+                    await self.execute_tool(tool_use)
+        
+        return ai_response or "AI已处理您的请求"
     
     async def _track_file_operations(self, content: str):
         """跟踪文件操作"""
