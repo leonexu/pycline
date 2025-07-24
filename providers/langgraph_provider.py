@@ -6,8 +6,8 @@ from langchain_openai import ChatOpenAI
 from langchain_deepseek import ChatDeepSeek
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
-from ..core.config import AIConfig
-from ..tools.base import Tool
+from core.config import AIConfig
+from tools.base import Tool
 
 
 class LangGraphProvider:

@@ -5,7 +5,8 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
-
+from common_base import setup_logger
+logger = setup_logger()
 
 class TaskComplexity(Enum):
     SIMPLE = "simple"
@@ -423,10 +424,12 @@ class TaskPlanner:
         return order
 
 
+from providers.langgraph_provider import LangGraphProvider
+
 class PlanModeManager:
     """Plan模式管理器"""
     
-    def __init__(self, ai_provider):
+    def __init__(self, ai_provider: LangGraphProvider):
         self.ai_provider = ai_provider
         self.task_planner = TaskPlanner(ai_provider)
         self.current_plan: Optional[ExecutionPlan] = None
@@ -476,8 +479,8 @@ class PlanModeManager:
         if not self.current_plan:
             return False
             
-        print(self.get_plan_summary(self.current_plan))
-        print("\n" + "="*50)
+        logger.info(self.get_plan_summary(self.current_plan))
+        logger.info("\n" + "="*50)
         
         while True:
             response = input("是否批准此执行计划? (y/n/m=修改): ").lower().strip()
@@ -488,18 +491,18 @@ class PlanModeManager:
                 return False
             elif response in ['m', 'modify', '修改']:
                 self._modify_plan()
-                print("\n修改后的计划:")
-                print(self.get_plan_summary(self.current_plan))
-                print("\n" + "="*50)
+                logger.info("\n修改后的计划:")
+                logger.info(self.get_plan_summary(self.current_plan))
+                logger.info("\n" + "="*50)
             else:
-                print("请输入 y(批准), n(拒绝), 或 m(修改)")
+                logger.info("请输入 y(批准), n(拒绝), 或 m(修改)")
     
     def _modify_plan(self):
         """修改计划"""
-        print("\n可修改的内容:")
-        print("1. 调整子任务优先级")
-        print("2. 修改时间估算")
-        print("3. 添加/删除子任务")
+        logger.info("\n可修改的内容:")
+        logger.info("1. 调整子任务优先级")
+        logger.info("2. 修改时间估算")
+        logger.info("3. 添加/删除子任务")
         
         choice = input("请选择要修改的内容 (1-3): ").strip()
         
@@ -510,26 +513,26 @@ class PlanModeManager:
         elif choice == "3":
             self._modify_subtasks()
         else:
-            print("无效选择")
+            logger.info("无效选择")
     
     def _adjust_priorities(self):
         """调整优先级"""
-        print("\n当前子任务:")
+        logger.info("\n当前子任务:")
         for i, task in enumerate(self.current_plan.subtasks):
-            print(f"{i+1}. {task.name} (优先级: {task.priority})")
+            logger.info(f"{i+1}. {task.name} (优先级: {task.priority})")
         
         task_index = input("请选择要调整的任务编号: ").strip()
         if task_index.isdigit() and 1 <= int(task_index) <= len(self.current_plan.subtasks):
             new_priority = input("请输入新的优先级 (1-5): ").strip()
             if new_priority.isdigit() and 1 <= int(new_priority) <= 5:
                 self.current_plan.subtasks[int(task_index)-1].priority = int(new_priority)
-                print("优先级已更新")
+                logger.info("优先级已更新")
     
     def _adjust_time_estimates(self):
         """调整时间估算"""
-        print("\n当前子任务:")
+        logger.info("\n当前子任务:")
         for i, task in enumerate(self.current_plan.subtasks):
-            print(f"{i+1}. {task.name} (预估时间: {task.estimated_time}分钟)")
+            logger.info(f"{i+1}. {task.name} (预估时间: {task.estimated_time}分钟)")
         
         task_index = input("请选择要调整的任务编号: ").strip()
         if task_index.isdigit() and 1 <= int(task_index) <= len(self.current_plan.subtasks):
@@ -538,12 +541,12 @@ class PlanModeManager:
                 self.current_plan.subtasks[int(task_index)-1].estimated_time = int(new_time)
                 # 重新计算总时间
                 self.current_plan.estimated_total_time = sum(task.estimated_time for task in self.current_plan.subtasks)
-                print("时间估算已更新")
+                logger.info("时间估算已更新")
     
     def _modify_subtasks(self):
         """修改子任务"""
-        print("\n1. 添加子任务")
-        print("2. 删除子任务")
+        logger.info("\n1. 添加子任务")
+        logger.info("2. 删除子任务")
         
         choice = input("请选择操作 (1-2): ").strip()
         
@@ -569,12 +572,12 @@ class PlanModeManager:
                 self.current_plan.subtasks.append(new_task)
                 self.current_plan.execution_order.append(new_task.id)
                 self.current_plan.estimated_total_time += new_task.estimated_time
-                print("子任务已添加")
+                logger.info("子任务已添加")
         
         elif choice == "2":
-            print("\n当前子任务:")
+            logger.info("\n当前子任务:")
             for i, task in enumerate(self.current_plan.subtasks):
-                print(f"{i+1}. {task.name}")
+                logger.info(f"{i+1}. {task.name}")
             
             task_index = input("请选择要删除的任务编号: ").strip()
             if task_index.isdigit() and 1 <= int(task_index) <= len(self.current_plan.subtasks):
@@ -583,4 +586,4 @@ class PlanModeManager:
                 if task_to_remove.id in self.current_plan.execution_order:
                     self.current_plan.execution_order.remove(task_to_remove.id)
                 self.current_plan.estimated_total_time -= task_to_remove.estimated_time
-                print("子任务已删除")
+                logger.info("子任务已删除")

@@ -636,6 +636,60 @@ class FileContextTracker:
                 for entry_data in data.get("files_in_context", [])
             ]
     
+    def _sync_update_file_metadata(self, file_path: str, operation: str):
+        """同步更新文件元数据（用于文件监控器）"""
+        now = time.time()
+        
+        # 将现有条目标记为过期
+        for entry in self.files_in_context:
+            if entry.path == file_path and entry.record_state == "active":
+                entry.record_state = "stale"
+        
+        # 获取最新的时间戳
+        def get_latest_date(path: str, field: str) -> Optional[float]:
+            relevant_entries = [
+                entry for entry in self.files_in_context 
+                if entry.path == path and getattr(entry, field) is not None
+            ]
+            if relevant_entries:
+                return max(getattr(entry, field) for entry in relevant_entries)
+            return None
+        
+        # 创建新条目
+        new_entry = FileMetadataEntry(
+            path=file_path,
+            record_state="active",
+            record_source=operation,
+            cline_read_date=get_latest_date(file_path, "cline_read_date"),
+            cline_edit_date=get_latest_date(file_path, "cline_edit_date"),
+            user_edit_date=get_latest_date(file_path, "user_edit_date")
+        )
+        
+        # 根据操作类型更新时间戳
+        if operation == "user_edited":
+            new_entry.user_edit_date = now
+            self.recently_modified_files.add(file_path)
+        elif operation == "cline_edited":
+            new_entry.cline_read_date = now
+            new_entry.cline_edit_date = now
+        elif operation in ["read_tool", "file_mentioned"]:
+            new_entry.cline_read_date = now
+        
+        self.files_in_context.append(new_entry)
+        
+        # 同步保存元数据（不依赖事件循环）
+        self._sync_save_file_metadata()
+    
+    def _sync_save_file_metadata(self):
+        """同步保存文件元数据"""
+        metadata_file = os.path.join(self.task_directory, "file_metadata.json")
+        data = {
+            "files_in_context": [asdict(entry) for entry in self.files_in_context]
+        }
+        
+        with open(metadata_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    
     def dispose(self):
         """清理资源"""
         self.observer.stop()
@@ -662,10 +716,8 @@ class FileChangeHandler(FileSystemEventHandler):
             else:
                 # 用户编辑，需要通知
                 self.tracker.recently_modified_files.add(self.file_path)
-                # 异步更新文件跟踪
-                asyncio.create_task(
-                    self.tracker.track_file_context(self.file_path, "user_edited")
-                )
+                # 同步更新文件元数据（避免异步调用）
+                self.tracker._sync_update_file_metadata(self.file_path, "user_edited")
 
 
 # 使用示例
