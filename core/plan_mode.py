@@ -115,33 +115,34 @@ class TaskPlanner:
         return plan
     
     def _assess_complexity(self, task_description: str) -> TaskComplexity:
-        """评估任务复杂度"""
-        description_lower = task_description.lower()
+        """评估任务复杂度 - 使用AI评估而非规则"""
+        # 使用AI评估任务复杂度
+        complexity_prompt = f"""
+请评估以下任务的复杂度，返回simple、moderate或complex之一：
+
+任务描述: {task_description}
+
+评估标准:
+- simple: 单一、直接的任务，如创建单个文件、简单功能
+- moderate: 需要多个步骤或涉及多个文件的任务
+- complex: 复杂的系统性任务，需要架构设计或重构
+
+只返回复杂度等级，不需要解释。
+"""
         
-        # 复杂任务指标
-        complex_indicators = [
-            '重构', 'refactor', '架构', 'architecture', '系统', 'system', 
-            '框架', 'framework', '多个', 'multiple', '整个', 'entire'
-        ]
-        
-        # 中等复杂度指标
-        moderate_indicators = [
-            '修改', 'modify', '更新', 'update', '添加', 'add', 
-            '实现', 'implement', '集成', 'integrate'
-        ]
-        
-        # 简单任务指标
-        simple_indicators = [
-            '创建', 'create', '写', 'write', '生成', 'generate',
-            '一个', 'single', '简单', 'simple'
-        ]
-        
-        if any(indicator in description_lower for indicator in complex_indicators):
-            return TaskComplexity.COMPLEX
-        elif any(indicator in description_lower for indicator in moderate_indicators):
+        try:
+            result = self.ai_provider.execute_task("", complexity_prompt, [])
+            complexity_str = result.get("content", "").strip().lower()
+            
+            if "complex" in complexity_str:
+                return TaskComplexity.COMPLEX
+            elif "moderate" in complexity_str:
+                return TaskComplexity.MODERATE
+            else:
+                return TaskComplexity.SIMPLE
+        except:
+            # 如果AI调用失败，默认为中等复杂度
             return TaskComplexity.MODERATE
-        else:
-            return TaskComplexity.SIMPLE
     
     def _decompose_task(self, task_description: str, complexity: TaskComplexity) -> List[SubTask]:
         """分解任务为子任务"""

@@ -19,7 +19,7 @@ import uuid
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, asdict
 from datetime import datetime
-
+from common_base import setup_logger
 from .context_manager import ContextManager
 from .plan_mode import PlanModeManager
 from .types import (
@@ -27,7 +27,7 @@ from .types import (
     ClineMessage, ChatSettings, HistoryItem, ToolUse
 )
 from .tool_executor import ToolExecutor
-from tools.advanced_tools import AdvancedToolManager
+logger = setup_logger()
 
 
 @dataclass
@@ -61,7 +61,6 @@ class TaskManager:
         self.current_task: Optional[TaskMetadata] = None
         self.context_manager: Optional[ContextManager] = None
         self.plan_mode_manager: Optional[PlanModeManager] = None
-        self.tool_manager = AdvancedToolManager()
         
         # 对话历史
         self.conversation_history: List[Dict[str, Any]] = []
@@ -129,7 +128,7 @@ class TaskManager:
         self.task_history.append(task_metadata)
         await self._save_task_history()
         
-        print(f"[TaskManager] 创建任务: {title} (ID: {task_id}, 模式: {mode})")
+        logger.info(f"[TaskManager] 创建任务: {title} (ID: {task_id}, 模式: {mode})")
         return task_id
     
     async def _resume_task(self, task_id: str) -> bool:
@@ -142,13 +141,13 @@ class TaskManager:
                 break
         
         if not task_metadata:
-            print(f"[TaskManager] 任务不存在: {task_id}")
+            logger.error(f"[TaskManager] 任务不存在: {task_id}")
             return False
         
         # 加载任务数据
         task_data = await self._load_task_data(task_id)
         if not task_data:
-            print(f"[TaskManager] 无法加载任务数据: {task_id}")
+            logger.error(f"[TaskManager] 无法加载任务数据: {task_id}")
             return False
         
         # 设置为当前任务
@@ -180,7 +179,7 @@ class TaskManager:
         task_metadata.updated_at = time.time()
         await self._save_task_metadata(task_metadata)
         
-        print(f"[TaskManager] 恢复任务: {task_metadata.title} (ID: {task_id})")
+        logger.info(f"[TaskManager] 恢复任务: {task_metadata.title} (ID: {task_id})")
         return True
     
     async def add_message(self, role: str, content: str, metadata: Optional[Dict] = None) -> None:
@@ -290,7 +289,7 @@ class TaskManager:
         context, was_optimized = await self.get_optimized_context()
         
         if was_optimized:
-            print("[TaskManager] 上下文已优化")
+            logger.info("[TaskManager] 上下文已优化")
         
         # 直接让AI处理，AI会自动决定是否使用工具
         return await self._get_ai_response(context)
@@ -458,7 +457,7 @@ class TaskManager:
                 self.context_manager = None
         
         await self._save_task_history()
-        print(f"[TaskManager] 删除任务: {task_id}")
+        logger.info(f"[TaskManager] 删除任务: {task_id}")
         return True
     
     async def _save_task_metadata(self, task: TaskMetadata):
@@ -529,7 +528,7 @@ class TaskManager:
         if self.context_manager:
             self.context_manager.file_context_tracker.dispose()
         
-        print("[TaskManager] 资源清理完成")
+        logger.info("[TaskManager] 资源清理完成")
     
     # ========== Cline标准化接口 ==========
     # 以下方法与Cline的Controller + Task接口保持一致
@@ -568,7 +567,7 @@ class TaskManager:
         elif message_type == "mode_switch":
             await self._switch_mode(message.text or "act")
         else:
-            print(f"[TaskManager] Unknown message type: {message_type}")
+            logger.error(f"[TaskManager] Unknown message type: {message_type}")
     
     async def get_current_mode(self) -> str:
         """获取当前模式 - 对应Cline的Controller.getCurrentMode()"""
@@ -586,11 +585,11 @@ class TaskManager:
     async def _switch_mode(self, mode: str) -> bool:
         """内部切换模式方法"""
         if not self.current_task:
-            print("[TaskManager] 没有活跃任务")
+            logger.error("[TaskManager] 没有活跃任务")
             return False
         
         if self.current_task.mode == mode:
-            print(f"[TaskManager] 已经是 {mode} 模式")
+            logger.info(f"[TaskManager] 已经是 {mode} 模式")
             return True
         
         # 更新任务模式
@@ -606,7 +605,7 @@ class TaskManager:
             f"[MODE_SWITCH] 切换到 {mode.upper()} 模式"
         )
         
-        print(f"[TaskManager] 切换到 {mode.upper()} 模式")
+        logger.info(f"[TaskManager] 切换到 {mode.upper()} 模式")
         return True
     
     async def say(self, message_type: ClineSay, text: Optional[str] = None,
@@ -626,7 +625,7 @@ class TaskManager:
             "partial": partial
         })
         
-        print(f"[SAY {message_type}] {text}")
+        logger.info(f"[SAY {message_type}] {text}")
     
     async def ask(self, message_type: ClineAsk, text: Optional[str] = None,
                  partial: Optional[bool] = None) -> AskResponse:
@@ -639,7 +638,7 @@ class TaskManager:
             "partial": partial
         })
         
-        print(f"[ASK {message_type}] {text}")
+        logger.info(f"[ASK {message_type}] {text}")
         
         # 简化的用户交互 - 在实际应用中应该等待用户响应
         # 这里默认返回批准
@@ -737,4 +736,4 @@ class TaskManager:
             if self.context_manager:
                 self.context_manager.file_context_tracker.dispose()
                 self.context_manager = None
-            print("[TaskManager] 任务已清理")
+            logger.info("[TaskManager] 任务已清理")
