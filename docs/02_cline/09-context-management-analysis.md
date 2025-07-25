@@ -11,8 +11,83 @@ Cline的上下文管理系统是其核心技术之一，负责在有限的上下
 2. **内容去重**: 识别并压缩重复的文件读取操作
 3. **文件跟踪**: 监控文件变更，防止上下文过期
 4. **状态持久化**: 保存上下文变更历史，支持任务恢复
+5. **环境感知**: 动态收集工作目录、终端状态、文件变更等环境信息
 
-## 🏗️ 核心架构组件
+### 重要发现：Cline不建立文件索引
+通过源码分析确认，**Cline并不对工作目录下的文件建立预先的索引**。相反，它采用**按需收集**的策略：
+
+1. **动态环境详情**: 每次API请求时动态生成环境详情
+2. **工具驱动**: 通过`list_files`、`read_file`等工具按需访问文件
+3. **实时状态**: 收集VSCode可见文件、打开标签、终端状态等实时信息
+4. **文件监控**: 只对已访问的文件设置监控器，而非全目录监控
+
+## � 环境上下文收集算法
+
+### 环境详情生成流程
+Cline在每次API请求前都会调用`getEnvironmentDetails()`方法动态收集当前环境信息：
+
+```typescript
+// src/core/task/index.ts - Task.getEnvironmentDetails()
+async getEnvironmentDetails(includeFileDetails: boolean = false) {
+    let details = ""
+
+    // 1. VSCode可见文件
+    details += "\n\n# VSCode Visible Files"
+    const visibleFilePaths = vscode.window.visibleTextEditors
+        ?.map((editor) => editor.document?.uri?.fsPath)
+        .filter(Boolean)
+        .map((absolutePath) => path.relative(this.cwd, absolutePath))
+
+    // 2. VSCode打开标签
+    details += "\n\n# VSCode Open Tabs"
+    const openTabPaths = vscode.window.tabGroups.all
+        .flatMap((group) => group.tabs)
+        .map((tab) => (tab.input as vscode.TabInputText)?.uri?.fsPath)
+        .filter(Boolean)
+        .map((absolutePath) => path.relative(this.cwd, absolutePath))
+
+    // 3. 终端状态监控
+    const busyTerminals = this.terminalManager.getTerminals(true)
+    const inactiveTerminals = this.terminalManager.getTerminals(false)
+    
+    // 4. 最近修改的文件
+    const recentlyModifiedFiles = this.fileContextTracker.getAndClearRecentlyModifiedFiles()
+    
+    // 5. 当前时间和时区
+    const now = new Date()
+    const formatter = new Intl.DateTimeFormat(undefined, {
+        year: "numeric", month: "numeric", day: "numeric",
+        hour: "numeric", minute: "numeric", second: "numeric", hour12: true,
+    })
+    
+    // 6. 工作目录文件列表（可选）
+    if (includeFileDetails) {
+        const [files, didHitLimit] = await listFiles(this.cwd, true, 200)
+        const result = formatResponse.formatFilesList(this.cwd, files, didHitLimit, this.clineIgnoreController)
+        details += result
+    }
+
+    // 7. Git远程仓库信息
+    const gitRemotes = await getGitRemoteUrls(this.cwd)
+    
+    // 8. 上下文窗口使用情况
+    const { contextWindow } = getContextWindowInfo(this.api)
+    const usagePercentage = Math.round((lastApiReqTotalTokens / contextWindow) * 100)
+    details += `\n${lastApiReqTotalTokens.toLocaleString()} / ${(contextWindow / 1000).toLocaleString()}K tokens used (${usagePercentage}%)`
+
+    return `<environment_details>\n${details.trim()}\n</environment_details>`
+}
+```
+
+### 环境详情收集的关键特点
+
+1. **实时性**: 每次API请求都重新收集，确保信息最新
+2. **选择性**: 根据`includeFileDetails`参数决定是否包含文件列表
+3. **过滤性**: 通过`ClineIgnoreController`过滤不相关文件
+4. **状态感知**: 区分活跃和非活跃终端，监控文件变更
+5. **上下文感知**: 包含token使用情况，帮助AI了解上下文限制
+
+## �🏗️ 核心架构组件
 
 ### 1. ContextManager - 上下文管理器
 
