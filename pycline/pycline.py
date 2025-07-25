@@ -8,6 +8,7 @@ from .config import Config
 from .models import TaskResult, TaskStatus, ToolCall, FileChange
 from .context_manager import ContextManager
 from .tool_executor import ToolExecutor
+from .repo_analyzer import RepoAnalyzer
 from ..tools.file_tools import FileReadTool, FileWriteTool, ListDirectoryTool
 from ..tools.command_tools import CommandExecuteTool
 from ..providers.langgraph_provider import LangGraphProvider
@@ -22,6 +23,9 @@ class PyCline:
         self.tool_executor = ToolExecutor(config.security)
         self.ai_provider = LangGraphProvider(config.ai)
         self.task_history: List[TaskResult] = []
+        
+        # 代码库分析器（延迟初始化）
+        self.repo_analyzer = None
         
         # 注册内置工具
         self._register_builtin_tools()
@@ -59,13 +63,13 @@ class PyCline:
             start_time=start_time
         )
         
-        # 1. 构建上下文
-        context = self.context_manager.build_context(
+        # 1. 构建增强上下文
+        context = self.context_manager.build_enhanced_context(
             task_description, workspace_path, context_files, **kwargs
         )
         
         # 2. 格式化上下文为字符串
-        context_str = self._format_context_for_ai(context)
+        context_str = self._format_enhanced_context_for_ai(context)
         
         # 3. 获取可用工具
         available_tools = self.tool_executor.get_available_tools()

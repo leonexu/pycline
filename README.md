@@ -1,7 +1,5 @@
 # PyCline
 
-[中文版本](README_zh.md) | English Version
-
 PyCline is a Python implementation of Cline (formerly Claude Dev), providing AI-powered code generation and task automation capabilities. It offers a standardized interface compatible with Cline while leveraging the Python ecosystem.
 
 ## 🌟 Features
@@ -17,15 +15,14 @@ PyCline is a Python implementation of Cline (formerly Claude Dev), providing AI-
 
 ### Prerequisites
 
-- Python 3.8+
-- Required dependencies (see `requirements.txt`)
+- Python 3.12
 
 ### Installation
 
 ```bash
 git clone https://github.com/leonexu/pycline.git
 cd pycline
-pip install -r requirements.txt # or poetry install
+poetry install --no-root
 ```
 
 ### Basic Usage

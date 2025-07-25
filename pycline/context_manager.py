@@ -1,6 +1,7 @@
 """
 PyCline上下文管理器
 基于Cline的智能上下文管理机制实现，包括智能截断、内容去重和文件跟踪功能
+增强版本：集成代码库映射功能，提供智能代码理解和上下文生成
 
 对应Cline模块关系:
 - ContextManager -> Cline的ContextManager类
@@ -10,6 +11,10 @@ PyCline上下文管理器
 - get_optimized_context_messages() -> Cline的getNewContextMessagesAndMetadata()
 - _apply_intelligent_truncation() -> Cline的getNextTruncationRange()
 - _find_duplicate_file_reads() -> Cline的getPossibleDuplicateFileReads()
+
+新增功能:
+- RepoAnalyzer集成：智能代码库分析和上下文生成
+- build_context：增强的上下文构建，包含代码库映射信息
 """
 
 import json
@@ -23,6 +28,9 @@ from pathlib import Path
 import asyncio
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+
+# 导入代码库分析器
+from .repo_analyzer import RepoAnalyzer
 
 class EditType(IntEnum):
     """编辑类型枚举"""
@@ -72,6 +80,9 @@ class ContextManager:
         # 文件跟踪
         self.file_context_tracker = FileContextTracker(task_id, working_directory)
         
+        # 代码库分析器
+        self.repo_analyzer = RepoAnalyzer(working_directory)
+        
         # 任务目录
         self.task_directory = os.path.join(working_directory, ".pycline", "tasks", task_id)
         os.makedirs(self.task_directory, exist_ok=True)
@@ -80,6 +91,214 @@ class ContextManager:
         """初始化上下文历史"""
         await self._load_context_history()
         await self.file_context_tracker.initialize()
+    
+    def build_enhanced_context(self, 
+                              task_description: str, 
+                              workspace_path: str, 
+                              context_files: Optional[List[str]] = None,
+                              **kwargs) -> Dict[str, Any]:
+        """
+        构建增强的上下文信息
+        整合Cline的环境详情收集和Aider的代码库映射功能
+        """
+        print("[ContextManager] 开始构建增强上下文...")
+        
+        # 确保代码库分析器使用正确的工作空间路径
+        if self.repo_analyzer.workspace_path != workspace_path:
+            self.repo_analyzer = RepoAnalyzer(workspace_path)
+        
+        # 1. 收集环境详情（模拟Cline的getEnvironmentDetails）
+        environment_details = self._get_environment_details(workspace_path, context_files)
+        
+        # 2. 使用代码库分析器生成代码库映射
+        repo_context = self.repo_analyzer.get_relevant_context(
+            task_description, 
+            context_files,
+            max_tokens=kwargs.get('repo_map_tokens', 6000)
+        )
+        
+        # 3. 读取相关文件内容
+        file_contents = self._read_relevant_files(
+            task_description, 
+            workspace_path, 
+            context_files,
+            max_tokens=kwargs.get('file_content_tokens', 6000)
+        )
+        
+        # 4. 构建整合的上下文
+        enhanced_context = {
+            "workspace_path": workspace_path,
+            "task_description": task_description,
+            "environment_details": environment_details,
+            "repo_map": repo_context,
+            "file_contents": file_contents,
+            "project_info": self._get_project_info(workspace_path),
+            "token_usage": self._estimate_total_tokens(environment_details, repo_context, file_contents)
+        }
+        
+        print(f"[ContextManager] 增强上下文构建完成，预估 {enhanced_context['token_usage']} tokens")
+        
+        return enhanced_context
+    
+    def _get_environment_details(self, workspace_path: str, context_files: Optional[List[str]]) -> Dict[str, Any]:
+        """收集环境详情（模拟Cline的环境详情收集）"""
+        import time
+        from datetime import datetime
+        
+        details = {
+            "current_time": datetime.now().strftime("%m/%d/%Y, %I:%M:%S %p (Asia/Shanghai, UTC+8:00)"),
+            "working_directory": workspace_path,
+            "context_files": context_files or [],
+            "recently_modified_files": self.file_context_tracker.get_and_clear_recently_modified_files(),
+            "files_in_context": [entry.path for entry in self.file_context_tracker.files_in_context if entry.record_state == "active"]
+        }
+        
+        import os
+        files = []
+        for root, dirs, filenames in os.walk(workspace_path):
+            # 过滤隐藏目录和常见的忽略目录
+            dirs[:] = [d for d in dirs if not d.startswith('.') and d not in {'node_modules', '__pycache__', 'venv', '.venv'}]
+            
+            for filename in filenames:
+                if not filename.startswith('.') and len(files) < 200:
+                    rel_path = os.path.relpath(os.path.join(root, filename), workspace_path)
+                    files.append(rel_path)
+            
+            if len(files) >= 200:
+                break
+        
+        details["directory_files"] = files[:200]
+        details["file_count_limited"] = len(files) >= 200
+        
+        return details
+    
+    def _read_relevant_files(self, 
+                            task_description: str, 
+                            workspace_path: str, 
+                            context_files: Optional[List[str]],
+                            max_tokens: int = 6000) -> List[Dict[str, Any]]:
+        """读取相关文件内容"""
+        file_contents = []
+        current_tokens = 0
+        
+        # 1. 优先读取明确指定的文件
+        if context_files:
+            for file_path in context_files:
+                if current_tokens >= max_tokens:
+                    break
+                
+                full_path = os.path.join(workspace_path, file_path) if not os.path.isabs(file_path) else file_path
+                content_info = self._read_single_file(full_path, workspace_path)
+                
+                if content_info:
+                    estimated_tokens = len(content_info["content"]) // 4
+                    if current_tokens + estimated_tokens <= max_tokens:
+                        file_contents.append(content_info)
+                        current_tokens += estimated_tokens
+                        
+                        # 跟踪文件访问
+                        asyncio.create_task(
+                            self.file_context_tracker.track_file_context(content_info["path"], "read_tool")
+                        )
+        
+        # 2. 如果还有token预算，读取代码库分析器推荐的文件
+        if current_tokens < max_tokens and hasattr(self.repo_analyzer, 'ranked_files'):
+            for file_path in self.repo_analyzer.ranked_files[:10]:
+                if current_tokens >= max_tokens:
+                    break
+                
+                # 避免重复读取
+                if any(fc["path"] == file_path for fc in file_contents):
+                    continue
+                
+                full_path = os.path.join(workspace_path, file_path)
+                content_info = self._read_single_file(full_path, workspace_path)
+                
+                if content_info:
+                    estimated_tokens = len(content_info["content"]) // 4
+                    if current_tokens + estimated_tokens <= max_tokens:
+                        file_contents.append(content_info)
+                        current_tokens += estimated_tokens
+        
+        return file_contents
+    
+    def _read_single_file(self, file_path: str, workspace_path: str) -> Optional[Dict[str, Any]]:
+        """读取单个文件"""
+        if not os.path.exists(file_path):
+            return None
+        
+        # 检查文件大小限制
+        file_size = os.path.getsize(file_path)
+        if file_size > 100 * 1024:  # 100KB限制
+            return None
+        
+        # 读取文件内容
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            content = f.read()
+        
+        # 获取相对路径
+        rel_path = os.path.relpath(file_path, workspace_path)
+        
+        # 检测语言
+        from .repo_analyzer import LanguageDetector
+        language = LanguageDetector.detect_language(file_path) or "text"
+        
+        return {
+            "path": rel_path,
+            "content": content,
+            "language": language,
+            "size": file_size,
+            "last_modified": os.path.getmtime(file_path)
+        }
+    
+    def _get_project_info(self, workspace_path: str) -> Dict[str, Any]:
+        """获取项目信息"""
+        # 如果代码库分析器还没有分析过，先进行分析
+        if not self.repo_analyzer.file_analyses:
+            self.repo_analyzer.analyze_codebase()
+        
+        return {
+            "name": os.path.basename(workspace_path),
+            "type": self._detect_project_type(workspace_path),
+            "total_files": len(self.repo_analyzer.file_analyses),
+            "languages": self.repo_analyzer._get_language_stats(),
+            "top_files": self.repo_analyzer.ranked_files[:10] if self.repo_analyzer.ranked_files else []
+        }
+    
+    def _detect_project_type(self, workspace_path: str) -> str:
+        """检测项目类型"""
+        indicators = {
+            "python": ["requirements.txt", "setup.py", "pyproject.toml", "Pipfile"],
+            "javascript": ["package.json", "yarn.lock", "package-lock.json"],
+            "java": ["pom.xml", "build.gradle", "gradle.properties"],
+            "go": ["go.mod", "go.sum"],
+            "rust": ["Cargo.toml", "Cargo.lock"],
+        }
+        
+        for project_type, files in indicators.items():
+            for file_name in files:
+                if os.path.exists(os.path.join(workspace_path, file_name)):
+                    return project_type
+        
+        return "unknown"
+    
+    def _estimate_total_tokens(self, environment_details: Dict, repo_map: str, file_contents: List[Dict]) -> int:
+        """估算总token使用量"""
+        total_chars = 0
+        
+        # 环境详情
+        total_chars += len(str(environment_details))
+        
+        # 代码库映射
+        if repo_map:
+            total_chars += len(repo_map)
+        
+        # 文件内容
+        for file_info in file_contents:
+            total_chars += len(file_info["content"])
+        
+        # 粗略估算：1 token ≈ 4 字符
+        return total_chars // 4
     
     def get_context_window_info(self, model_name: str, context_window: Optional[int] = None) -> ContextWindowInfo:
         """

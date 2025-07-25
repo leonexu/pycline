@@ -1,17 +1,29 @@
-# PyCline Dependencies
-# Generated from pyproject.toml
-
 # Core dependencies
-pytz>=2025.2,<2026.0
-watchdog>=6.0.0,<7.0.0
-langchain-openai>=0.3.28,<0.4.0
-langchain-deepseek>=0.1.4,<0.2.0
-langgraph>=0.5.4,<0.6.0
+langchain>=0.1.0
+langchain-community>=0.0.20
+langgraph>=0.0.30
+pydantic>=2.0.0
+python-dotenv>=1.0.0
 
-# Additional dependencies for development and testing
-# (Add these if needed for development)
-# pytest>=7.0.0
-# pytest-asyncio>=0.21.0
-# black>=23.0.0
-# flake8>=6.0.0
-# mypy>=1.0.0
+# File watching and monitoring
+watchdog>=3.0.0
+
+# Code analysis and parsing
+tree-sitter>=0.20.0
+tree-sitter-python>=0.20.0
+tree-sitter-javascript>=0.20.0
+
+# Graph algorithms for repo mapping
+networkx>=3.0
+
+# Caching
+diskcache>=5.6.0
+
+# Git integration
+GitPython>=3.1.0
+
+# Development dependencies
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+black>=23.0.0
+isort>=5.12.0

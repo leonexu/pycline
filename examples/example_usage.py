@@ -5,7 +5,7 @@ PyCline包使用示例
 
 import asyncio
 import os
-from pycline import TaskManager, WebviewMessage
+from pycline.task_manager import TaskManager, WebviewMessage
 
 
 async def generate_sorting_code():
